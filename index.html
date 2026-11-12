@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Jechać!</title>
+<link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+<section id="menu" class="screen">
+  <h1>Jechać!</h1>
+  <p class="sub">Wyścigi gokartów po prawdziwych ulicach. Wybierz kierowcę, a potem trasę.</p>
+  <div id="cards" class="cards"></div>
+  <div id="diff" class="row"><span>Poziom rywali:</span><button data-d="0">Łatwy</button><button data-d="1">Średni</button><button data-d="2">Trudny</button></div>
+  <button id="newtrk" class="big">Narysuj nową trasę</button>
+  <div id="tracks"></div>
+  <div id="mstatus" class="small"></div>
+  <form id="joinrow"><span>Masz kod gry?</span><input id="jcode0" maxlength="4" placeholder="KOD" autocomplete="off" /><button>Dołącz</button></form>
+  <button id="glb" class="ghost">Pobierz modele GLB</button>
+</section>
+
+<section id="mapscr" class="screen hidden">
+  <div id="map"></div>
+  <form id="addr">
+    <input id="q" placeholder="Podaj adres, np. Rynek Główny, Kraków" autocomplete="off" />
+    <button>Szukaj</button>
+  </form>
+  <div id="status"></div>
+  <div id="tools"><button id="finish" class="hidden">Koniec trasy</button><button id="undo" class="ghost">Cofnij punkt</button><button id="reset" class="ghost">Od nowa</button><button id="back" class="ghost">Kierowca</button></div>
+  <div id="confirm" class="hidden">
+    <div id="ctitle"></div>
+    <div id="laprow" class="hidden">Okrążenia: <span id="laps"></span></div>
+    <div class="row"><button id="invite">Zaproś graczy</button><button id="go" class="alt">Solo z botami</button><button id="redraw" class="ghost">Rysuj od nowa</button></div>
+  </div>
+</section>
+
+<section id="lobby" class="screen hidden">
+  <h2>Zaproś graczy</h2>
+  <div class="lobbybox">
+    <canvas id="qr"></canvas>
+    <div>
+      <div class="small">Kod gry</div>
+      <div id="lcode" class="code"></div>
+      <div id="lurl" class="small"></div>
+      <div class="small" style="margin-top:10px">Zeskanuj kod telefonem. Możesz grać na swoim ekranie albo użyć telefonu jako kontrolera do tego ekranu.</div>
+    </div>
+  </div>
+  <ul id="lplayers" class="players"></ul>
+  <div id="lleft" class="timer"></div>
+  <div class="row"><button id="lstart">Start teraz</button><button id="lcancel" class="ghost">Anuluj</button></div>
+</section>
+
+<section id="join" class="screen hidden">
+  <h2>Dołącz do gry</h2>
+  <div class="row"><input id="jcode" maxlength="4" placeholder="KOD" autocomplete="off" /><input id="jname" maxlength="14" placeholder="Twoje imię" autocomplete="off" /></div>
+  <div id="jcards" class="cards mini"></div>
+  <div class="row"><button id="jscreen">Gram na tym ekranie</button><button id="jpad" class="alt">Telefon jako kontroler</button></div>
+  <div id="jstatus" class="small"></div>
+  <button id="jback" class="ghost">Wróć</button>
+</section>
+
+<section id="wait" class="screen hidden">
+  <h2>Gra <span id="wcode"></span></h2>
+  <div id="wtext" class="timer">Czekamy na start…</div>
+  <ul id="wplayers" class="players"></ul>
+</section>
+
+<section id="loading" class="screen hidden"><div class="spin"></div><div id="ltext">Buduję miasto…</div></section>
+
+<section id="gamescr" class="screen hidden">
+  <canvas id="cv"></canvas>
+  <div id="views"></div>
+  <canvas id="mini" width="170" height="170"></canvas>
+  <div id="keys">Strzałki/WASD – jazda · Spacja – hamulec ręczny · R – wróć na tor · M – dźwięk</div>
+  <div id="tctl" class="tctl"></div>
+  <div class="rotate">Obróć telefon poziomo</div>
+  <button id="optbtn" title="Opcje" aria-label="Opcje">⚙</button>
+  <div id="opts" class="hidden"><h2>Opcje</h2><button id="osound"></button><button id="oresume">Wracam do wyścigu</button><button id="oquit" class="ghost">Wyjdź z wyścigu</button><div id="onote" class="small hidden">Wyścig trwa dalej, inni gracze nie czekają.</div></div>
+  <div id="results" class="hidden"><h2 id="rtitle"></h2><ol id="rlist"></ol><div class="row"><button id="again">Jeszcze raz</button><button id="newtrack" class="ghost">Nowa trasa</button></div><div id="rwait" class="small hidden">Czekam na decyzję hosta…</div></div>
+</section>
+
+<section id="pad" class="screen hidden">
+  <div id="padtop"><b id="pname"></b><span id="pinfo">Czekam na start…</span></div>
+  <div id="padctl" class="tctl"></div>
+  <div class="rotate">Obróć telefon poziomo</div>
+</section>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
