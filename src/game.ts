@@ -120,10 +120,186 @@ const setStyle = (el: HTMLElement, o: string) => {
   }
 };
 
+// ---------- dźwięk silników
+// Każdy kierowca ma własny charakter silnika: wysokość, barwę, liczbę biegów i skłonność do strzałów z wydechu.
+interface EngineProfile {
+  base: number; // Hz na wolnych obrotach
+  top: number; // Hz przy odcięciu
+  gears: number;
+  wave: OscillatorType;
+  sub: number; // głośność tonu o oktawę niżej (bas)
+  grit: number; // przesterowanie
+  cut: number; // jasność barwy (filtr)
+  fire: number; // głębokość „bulgotu" zapłonu
+  pops: number; // 0..1: jak chętnie strzela z wydechu
+  vol: number;
+}
+const PROFILES: Record<DriverId, EngineProfile> = {
+  general: { base: 34, top: 125, gears: 4, wave: 'sawtooth', sub: 0.8, grit: 4, cut: 750, fire: 0.45, pops: 1.0, vol: 1.15 }, // ciężkie V8, dużo strzałów
+  gryzek: { base: 68, top: 220, gears: 5, wave: 'square', sub: 0.25, grit: 1.6, cut: 1300, fire: 0.3, pops: 0.45, vol: 0.85 }, // brzęczący mały silniczek
+  runomistrz: { base: 42, top: 150, gears: 4, wave: 'sawtooth', sub: 0.5, grit: 2.2, cut: 620, fire: 0.6, pops: 0.6, vol: 1.0 }, // sapiąca maszyna parowa
+  teczka: { base: 58, top: 245, gears: 5, wave: 'sawtooth', sub: 0.3, grit: 2.6, cut: 1700, fire: 0.3, pops: 0.75, vol: 0.95 }, // wysokie obroty, ostry
+  czarlie: { base: 50, top: 160, gears: 3, wave: 'triangle', sub: 0.55, grit: 1.3, cut: 820, fire: 0.75, pops: 0.35, vol: 1.0 }, // pyrkająca kosiarka
+  niutu: { base: 82, top: 300, gears: 6, wave: 'sawtooth', sub: 0.12, grit: 1.0, cut: 2400, fire: 0.15, pops: 0.5, vol: 0.8 }, // kosmiczne wycie
+};
+const VMAX = 31; // m/s: górna granica skali biegów
+
+function gritCurve(k: number) {
+  const c = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i / 255) * 2 - 1;
+    c[i] = Math.tanh(x * k) / Math.tanh(k);
+  }
+  return c;
+}
+
+class Voice {
+  p: EngineProfile;
+  o1: OscillatorNode;
+  o2: OscillatorNode;
+  sub: OscillatorNode;
+  lp: BiquadFilterNode;
+  am: GainNode;
+  lfo: OscillatorNode;
+  lfoG: GainNode;
+  out: GainNode;
+  pan: StereoPannerNode;
+  gear = 0;
+  thr = 0.5;
+  prevV = 0;
+  nextPop = 0;
+  cutUntil = 0;
+  constructor(private eng: Engine, driver: DriverId) {
+    const ctx = eng.ctx!;
+    const p = (this.p = { ...PROFILES[driver] });
+    // drobne różnice nawet między dwoma takimi samymi kierowcami
+    const j = 0.94 + Math.random() * 0.12;
+    p.base *= j;
+    p.top *= j;
+    this.o1 = ctx.createOscillator();
+    this.o1.type = p.wave;
+    this.o2 = ctx.createOscillator();
+    this.o2.type = 'sawtooth';
+    this.o2.detune.value = 9;
+    this.sub = ctx.createOscillator();
+    this.sub.type = 'sine';
+    const g1 = ctx.createGain();
+    g1.gain.value = 0.5;
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.28;
+    const gs = ctx.createGain();
+    gs.gain.value = p.sub;
+    const ws = ctx.createWaveShaper();
+    ws.curve = gritCurve(p.grit);
+    this.lp = ctx.createBiquadFilter();
+    this.lp.type = 'lowpass';
+    this.lp.frequency.value = p.cut;
+    this.lp.Q.value = 2.5;
+    // „bulgot": głośność pulsuje w rytm zapłonu
+    this.am = ctx.createGain();
+    this.am.gain.value = 1 - p.fire;
+    this.lfo = ctx.createOscillator();
+    this.lfo.type = 'square';
+    this.lfoG = ctx.createGain();
+    this.lfoG.gain.value = p.fire;
+    this.lfo.connect(this.lfoG).connect(this.am.gain);
+    this.out = ctx.createGain();
+    this.out.gain.value = 0;
+    this.pan = ctx.createStereoPanner();
+    this.o1.connect(g1).connect(ws);
+    this.o2.connect(g2).connect(ws);
+    this.sub.connect(gs).connect(ws);
+    ws.connect(this.lp).connect(this.am).connect(this.out).connect(this.pan).connect(eng.master);
+    for (const o of [this.o1, this.o2, this.sub, this.lfo]) o.start();
+  }
+  // strzał z wydechu: krótki trzask szumu + niskie tąpnięcie
+  pop(t: number, loud: number) {
+    const ctx = this.eng.ctx!;
+    const n = ctx.createBufferSource();
+    n.buffer = this.eng.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 350 + Math.random() * 700;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    const peak = 0.55 * loud * this.p.vol;
+    const dec = 0.035 + Math.random() * 0.06;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+    n.connect(bp).connect(g).connect(this.pan);
+    n.start(t, Math.random() * 0.8, dec + 0.02);
+    const th = ctx.createOscillator();
+    th.frequency.setValueAtTime(95 + Math.random() * 40, t);
+    th.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(peak * 0.9, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    th.connect(tg).connect(this.pan);
+    th.start(t);
+    th.stop(t + 0.1);
+  }
+  burst(t: number, count: number, loud: number) {
+    if (loud < 0.05 || t < this.nextPop) return;
+    this.nextPop = t + 1.2 + Math.random() * 2.2; // przerwa po serii, żeby nie strzelał bez przerwy
+    let tt = t;
+    for (let i = 0; i < count; i++) {
+      this.pop(tt, loud * (0.6 + Math.random() * 0.5));
+      tt += 0.045 + Math.random() * 0.09;
+    }
+  }
+  update(t: number, dt: number, speed: number, thrIn: number | null, level: number, pan: number) {
+    const p = this.p;
+    const v = Math.abs(speed);
+    // gaz: od gracza wprost, u rywali z przyspieszenia
+    let thr = thrIn;
+    if (thr === null) {
+      const a = (v - this.prevV) / Math.max(dt, 1e-3);
+      thr = a > 0.6 ? 1 : a < -1.5 ? 0 : 0.5;
+    }
+    this.prevV = v;
+    const lastThr = this.thr;
+    this.thr += (thr - this.thr) * Math.min(1, dt * (thrIn === null ? 4 : 10));
+    // biegi: obroty rosną w obrębie biegu, przy zmianie spadają
+    const band = VMAX / p.gears;
+    const g = Math.min(p.gears - 1, Math.floor(v / band));
+    const frac = Math.min(1, (v - g * band) / band);
+    let rpm = v < 0.8 ? 0.06 + this.thr * 0.12 : 0.2 + frac * 0.8 - g * 0.03;
+    if (g > this.gear && v > 2) {
+      this.cutUntil = t + 0.09; // krótkie odcięcie przy zmianie biegu
+      if (Math.random() < p.pops * 0.55) this.burst(t + 0.03, 1 + Math.floor(Math.random() * 2), 0.8 * level);
+    }
+    this.gear = g;
+    // odpuszczenie gazu na wysokich obrotach: seria strzałów
+    if (lastThr > 0.65 && this.thr < 0.45 && rpm > 0.45 && Math.random() < p.pops) this.burst(t + 0.02, 2 + Math.floor(Math.random() * 4), level);
+    // toczenie się bez gazu: pojedyncze, losowe pyrknięcia
+    if (this.thr < 0.3 && v > 7 && t > this.nextPop && level > 0.05) {
+      if (Math.random() < p.pops * 0.5) this.pop(t, 0.7 * level);
+      this.nextPop = t + 0.6 + Math.random() * 1.8;
+    }
+    // drobne wahania obrotów, żeby silnik „żył"
+    rpm += Math.sin(t * 7.3 + p.base) * 0.008 + (Math.random() - 0.5) * 0.01;
+    const f = p.base + (p.top - p.base) * Math.max(0, rpm);
+    this.o1.frequency.setTargetAtTime(f, t, 0.03);
+    this.o2.frequency.setTargetAtTime(f * 1.5, t, 0.03);
+    this.sub.frequency.setTargetAtTime(f / 2, t, 0.03);
+    this.lfo.frequency.setTargetAtTime(Math.max(6, f / 4), t, 0.03);
+    this.lp.frequency.setTargetAtTime(p.cut * (0.55 + this.thr * 0.7), t, 0.06);
+    const cut = t < this.cutUntil ? 0.35 : 1;
+    this.out.gain.setTargetAtTime(level * p.vol * cut * (0.05 + this.thr * 0.06), t, cut < 1 ? 0.01 : 0.05);
+    this.pan.pan.setTargetAtTime(pan, t, 0.05);
+  }
+  stop() {
+    for (const o of [this.o1, this.o2, this.sub, this.lfo]) o.stop();
+    this.out.disconnect();
+  }
+}
+
 class Engine {
   ctx: AudioContext | null = null;
-  osc!: OscillatorNode;
-  gain!: GainNode;
+  master!: GainNode;
+  noise!: AudioBuffer;
+  voices = new Map<number, Voice>();
   sqF!: BiquadFilterNode;
   sqG!: GainNode;
   muted = false;
@@ -131,22 +307,16 @@ class Engine {
     if (this.ctx) return;
     try {
       this.ctx = new AudioContext();
-      this.osc = this.ctx.createOscillator();
-      this.osc.type = 'sawtooth';
-      const lp = this.ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 600;
-      this.gain = this.ctx.createGain();
-      this.gain.gain.value = 0;
-      this.osc.connect(lp).connect(this.gain).connect(this.ctx.destination);
-      this.osc.start();
-      // pisk opon: zapętlony szum przez wąski filtr pasmowy
+      this.master = this.ctx.createGain();
+      const comp = this.ctx.createDynamicsCompressor();
+      this.master.connect(comp).connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
-      const buf = this.ctx.createBuffer(1, len, len);
-      const data = buf.getChannelData(0);
+      this.noise = this.ctx.createBuffer(1, len, len);
+      const data = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      // pisk opon: zapętlony szum przez wąski filtr pasmowy
       const noise = this.ctx.createBufferSource();
-      noise.buffer = buf;
+      noise.buffer = this.noise;
       noise.loop = true;
       this.sqF = this.ctx.createBiquadFilter();
       this.sqF.type = 'bandpass';
@@ -154,21 +324,36 @@ class Engine {
       this.sqF.Q.value = 9;
       this.sqG = this.ctx.createGain();
       this.sqG.gain.value = 0;
-      noise.connect(this.sqF).connect(this.sqG).connect(this.ctx.destination);
+      noise.connect(this.sqF).connect(this.sqG).connect(this.master);
       noise.start();
     } catch {
       this.ctx = null;
     }
   }
-  update(speed: number, thr: number, skid = 0) {
+  // me: kart, którego słucha gracz; pozostałe słychać ciszej, zależnie od odległości i strony
+  update(me: Kart, karts: Kart[], thr: number, dt: number) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.sqG.gain.setTargetAtTime(this.muted ? 0 : Math.min(0.22, skid * 0.24), t, 0.05);
-    this.sqF.frequency.setTargetAtTime(1250 + Math.abs(speed) * 22, t, 0.1);
-    this.osc.frequency.setTargetAtTime(55 + Math.abs(speed) * 5.5, t, 0.05);
-    this.gain.gain.setTargetAtTime(this.muted ? 0 : 0.025 + thr * 0.03, t, 0.08);
+    this.master.gain.setTargetAtTime(this.muted ? 0 : 1, t, 0.05);
+    this.sqG.gain.setTargetAtTime(Math.min(0.22, me.skid * 0.24), t, 0.05);
+    this.sqF.frequency.setTargetAtTime(1250 + Math.abs(me.speed) * 22, t, 0.1);
+    const rx = Math.cos(me.h), rz = -Math.sin(me.h); // prawa strona gracza
+    karts.forEach((k, i) => {
+      let level = 1, pan = 0;
+      if (k !== me) {
+        const dx = k.x - me.x, dz = k.z - me.z;
+        const d = Math.hypot(dx, dz);
+        level = Math.max(0, 1 - d / 70) ** 2 * 0.55;
+        pan = Math.max(-0.9, Math.min(0.9, (dx * rx + dz * rz) / 14));
+      }
+      let v = this.voices.get(i);
+      if (!v) this.voices.set(i, (v = new Voice(this, k.driver)));
+      v.update(t, dt, k.speed, k === me ? thr : null, level, pan);
+    });
   }
   stop() {
+    for (const v of this.voices.values()) v.stop();
+    this.voices.clear();
     this.ctx?.close();
     this.ctx = null;
   }
@@ -881,6 +1066,6 @@ export class Game {
     }
     if (this.frameNo % 3 === 0) this.drawMini();
     const p0 = this.views[0].kart;
-    this.engine.update(p0.speed, p0.finished === null && p0.ctrl === 'key' ? this.lastThr : 0.4, p0.skid);
+    this.engine.update(p0, this.karts, p0.finished === null && p0.ctrl === 'key' ? this.lastThr : 0.4, this.dt);
   }
 }
