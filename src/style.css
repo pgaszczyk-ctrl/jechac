@@ -6,7 +6,7 @@ html, body { margin:0; height:100%; overflow:hidden; background:#16120e; color:v
 #menu { background: radial-gradient(circle at 50% 0%, #3a2a1c, #16120e 70%); overflow:auto; justify-content:flex-start; }
 h1 { font-size: clamp(48px, 9vw, 96px); margin:12px 0 0; letter-spacing:2px; color:var(--accent); text-shadow:0 4px 0 #000a; font-style:italic; }
 .sub { opacity:.8; margin:4px 0 18px; text-align:center; }
-#cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; width:min(1000px,100%); }
+#cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:14px; width:min(1000px,100%); }
 .card { background:#241d16; border:2px solid #4a3b2c; border-radius:14px; padding:10px; cursor:pointer; text-align:center; transition:transform .15s, border-color .15s; }
 .card:hover { transform:translateY(-4px); border-color:var(--c); }
 .card img { width:100%; border-radius:8px; background:linear-gradient(#cfd8de,#aab5bd); }
@@ -63,7 +63,7 @@ input { font:inherit; padding:10px 12px; border-radius:10px; border:0; }
 .players li { background:#241d16; border:2px solid var(--c,#4a3b2c); border-radius:999px; padding:6px 14px; }
 .players li small { opacity:.7; margin-left:6px; }
 .timer { font-size:22px; }
-.cards.mini { grid-template-columns:repeat(4, minmax(70px, 130px)); gap:8px; justify-content:center; }
+.cards.mini { grid-template-columns:repeat(auto-fit, minmax(70px, 110px)); gap:8px; justify-content:center; }
 .cards.mini .card { padding:5px; }
 .cards.mini .card b { font-size:14px; }
 .cards.mini .card span { display:none; }

@@ -271,7 +271,12 @@ function makeRoster(players: PlayerInfo[], me: string): RosterEntry[] {
     } else humans.push({ driver: d, name: p.name || dname(d), owner: p.id });
   }
   const used = new Set(humans.map((h) => h.driver));
+  // boty losują kierowców spośród tych, których nie wzięli ludzie
   const free = DRIVERS.map((d) => d.id).filter((d) => !used.has(d));
+  for (let i = free.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [free[i], free[j]] = [free[j], free[i]];
+  }
   const bots: Omit<RosterEntry, 'kid' | 'slot'>[] = [];
   for (let i = 0; humans.length + bots.length < 4; i++) {
     const d = free[i] ?? DRIVERS[i % DRIVERS.length].id;
