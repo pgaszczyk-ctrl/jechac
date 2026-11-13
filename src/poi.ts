@@ -85,7 +85,7 @@ function signTexture(k: Kind, name: string) {
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   do {
-    x.font = `bold ${fs}px Georgia, 'Segoe UI Emoji', serif`;
+    x.font = `bold ${fs}px 'Lilita One', 'Arial Black', 'Segoe UI Emoji', sans-serif`;
     fs -= 4;
   } while (x.measureText(text).width > 470 && fs > 18);
   x.fillText(text, 256, 52);

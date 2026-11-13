@@ -37,7 +37,7 @@ function label(text: string, bg: string, fg: string, w = 0.5, h = 0.5) {
   x.fillStyle = bg;
   x.fillRect(0, 0, 128, 128);
   x.fillStyle = fg;
-  x.font = 'bold 96px Georgia, serif';
+  x.font = "96px 'Lilita One', 'Arial Black', Impact, sans-serif";
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.fillText(text, 64, 70);
@@ -260,7 +260,7 @@ function czarlie(): THREE.Group {
     x.strokeStyle = '#4a2c1a';
     x.stroke();
     x.fillStyle = '#4a2c1a';
-    x.font = 'bold 84px Georgia, serif';
+    x.font = "84px 'Lilita One', 'Arial Black', Impact, sans-serif";
     x.textAlign = 'center';
     x.textBaseline = 'middle';
     x.fillText('B', 64, 70);

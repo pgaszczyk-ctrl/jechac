@@ -74,7 +74,7 @@ function checker(label: string, bg = '#222') {
   x.fillStyle = bg;
   x.fillRect(0, 0, 512, 128);
   x.fillStyle = '#fff';
-  x.font = 'bold 84px Georgia, serif';
+  x.font = "84px 'Lilita One', 'Arial Black', Impact, sans-serif";
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.fillText(label, 256, 70);
@@ -143,7 +143,7 @@ function warnBanner(track: Track, idx: number, dir: number, lampA: THREE.Materia
     x.fillRect(i * 44 + 96, 142, 22, 18);
     x.restore();
   }
-  x.font = 'bold 96px Arial, sans-serif';
+  x.font = "92px 'Lilita One', 'Arial Black', Impact, sans-serif";
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   const arrow = dir > 0 ? '»»' : '««';

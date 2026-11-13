@@ -1,6 +1,6 @@
 :root { --ink:#1d1a16; --paper:#f6efe2; --accent:#ff5a1f; --gold:#c9a227; }
 * { box-sizing: border-box; }
-html, body { margin:0; height:100%; overflow:hidden; background:#16120e; color:var(--paper); font-family: Georgia, 'Times New Roman', serif; }
+html, body { margin:0; height:100%; overflow:hidden; background:#16120e; color:var(--paper); font-family: 'Fredoka', 'Trebuchet MS', 'Segoe UI', sans-serif; }
 .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; padding:16px; }
 .hidden { display:none !important; }
 #menu { background: radial-gradient(circle at 50% 0%, #3a2a1c, #16120e 70%); overflow:auto; justify-content:flex-start; }
@@ -198,3 +198,8 @@ button.big { font-size:24px; padding:14px 30px; margin-top:20px; }
 #views:not(.multi) .time { right:66px; }
 .view .draft { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); font-size:26px; font-weight:800; color:#7df9ff; text-shadow:0 2px 6px #000; opacity:0; transition:opacity .15s; pointer-events:none; white-space:nowrap; }
 #views.multi .draft { font-size:18px; }
+
+/* fonty: komiksowy krój na tytuły, przyciski i liczniki w wyścigu */
+h1, h2, h3, button, .card b, .view, #lcode, #rlist, #diff, .tc-btn { font-family: 'Lilita One', 'Arial Black', Impact, sans-serif; font-weight: 400; letter-spacing: .02em; }
+button { font-weight: 400; }
+.view .speed, .view .pos, .view .count { font-style: italic; }
