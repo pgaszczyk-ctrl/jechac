@@ -75,7 +75,7 @@ markDriver();
 $('newtrk').onclick = () => openMap();
 
 // --- poziom trudności botów (0 łatwy, 1 średni, 2 trudny)
-let difficulty = Math.max(0, Math.min(2, +(localStorage.getItem('jechac.diff') ?? 0) || 0));
+let difficulty = Math.max(-1, Math.min(2, +(localStorage.getItem('jechac.diff') ?? 0) || 0));
 const markDiff = () => document.querySelectorAll<HTMLElement>('#diff button').forEach((b) => b.classList.toggle('on', +b.dataset.d! === difficulty));
 document.querySelectorAll<HTMLElement>('#diff button').forEach((b) => {
   b.onclick = () => {
@@ -303,7 +303,7 @@ async function launch(msg: StartMsg, me: string, hold: boolean) {
   show('gamescr');
   game?.dispose();
   game = new Game({
-    canvas: $('cv') as HTMLCanvasElement, viewsEl: $('views'), track, els, karts, hold, difficulty, muted,
+    canvas: $('cv') as HTMLCanvasElement, viewsEl: $('views'), track, els, karts, hold, difficulty: Math.max(0, difficulty), assist: difficulty < 0, muted,
     net: link ?? undefined,
     onDone: showResults,
   });

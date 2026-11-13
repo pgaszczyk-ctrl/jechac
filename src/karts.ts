@@ -90,126 +90,396 @@ function arms(driver: THREE.Group, c: number) {
   for (const s of [-1, 1]) add(driver, cyl(0.07, 0.07, 0.7, 6), mat(c), [s * 0.38, 0.55, -0.35], [-1.15, 0, s * 0.12]);
 }
 
+// burty wycięte z profilu (z, y) — wspólne dla bolidów o kanciastym nadwoziu
+function sidePanels(g: THREE.Group, P: number[][], c: number, x = 0.74) {
+  const sh = new THREE.Shape();
+  P.forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1])));
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.08, bevelEnabled: false });
+  geo.rotateY(-Math.PI / 2); // kształt (x,y) -> (z,y), grubość wzdłuż -x
+  for (const s of [-1, 1]) add(g, geo, mat(c), [s * x + 0.04, 0, 0]);
+}
+const wheelSpokes = (g: THREE.Group, c: number) => {
+  for (const n of ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR']) {
+    const spin = g.getObjectByName(n)!.getObjectByName('spin')!;
+    const s = n.endsWith('L') ? -1 : 1;
+    for (let k = 0; k < 4; k++) add(spin, box(0.03, 0.5, 0.045), mat(c, { metalness: 0.6, roughness: 0.35 }), [s * 0.2, 0, 0], [(k * Math.PI) / 4, 0, 0]);
+  }
+};
+const laurel = (x: CanvasRenderingContext2D) => {
+  x.strokeStyle = x.fillStyle = '#ffc928';
+  x.lineWidth = 6;
+  for (const s of [-1, 1])
+    for (let k = 0; k < 6; k++) {
+      const a = Math.PI / 2 + s * (0.35 + k * 0.42);
+      x.beginPath();
+      x.ellipse(64 + Math.cos(a) * 40, 68 + Math.sin(a) * 40, 12, 5, a + s * 1.0, 0, 7);
+      x.fill();
+    }
+};
+const runes = (x: CanvasRenderingContext2D) => {
+  x.strokeStyle = '#ffc928';
+  x.lineWidth = 7;
+  x.lineCap = 'round';
+  const R: number[][][] = [
+    [[0, 0, 0, 1], [0, 0, 0.6, 0.25], [0.6, 0.25, 0, 0.5], [0, 0.5, 0.6, 1]],
+    [[0, 0, 0, 1], [0, 0, 0.6, 0.3], [0.6, 0.3, 0, 0.55]],
+    [[0.3, 0, 0.3, 1], [0, 0.3, 0.3, 0], [0.6, 0.3, 0.3, 0]],
+    [[0, 0, 0, 1], [0, 0.5, 0.6, 0], [0, 0.5, 0.6, 1]],
+  ];
+  R.forEach((r, i) => {
+    for (const l of r) {
+      x.beginPath();
+      x.moveTo(10 + i * 29 + l[0] * 20, 40 + l[1] * 48);
+      x.lineTo(10 + i * 29 + l[2] * 20, 40 + l[3] * 48);
+      x.stroke();
+    }
+  });
+};
+const runeTree = (x: CanvasRenderingContext2D) => {
+  x.strokeStyle = '#ffc928';
+  x.lineWidth = 9;
+  x.lineCap = 'round';
+  for (const l of [[64, 18, 64, 112], [64, 40, 36, 22], [64, 40, 92, 22], [64, 66, 36, 48], [64, 66, 92, 48], [64, 92, 40, 106], [64, 92, 88, 106]]) {
+    x.beginPath();
+    x.moveTo(l[0], l[1]);
+    x.lineTo(l[2], l[3]);
+    x.stroke();
+  }
+};
+const disc = (text: string, fg: string) => (x: CanvasRenderingContext2D) => {
+  x.fillStyle = '#fff3d6';
+  x.beginPath();
+  x.arc(64, 64, 56, 0, 7);
+  x.fill();
+  x.lineWidth = 6;
+  x.strokeStyle = '#ffc928';
+  x.stroke();
+  x.fillStyle = fg;
+  x.font = "84px 'Lilita One', 'Arial Black', Impact, sans-serif";
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText(text, 64, 70);
+};
+const acorn = (x: CanvasRenderingContext2D) => {
+  x.fillStyle = '#fff3d6';
+  x.beginPath();
+  x.ellipse(64, 76, 22, 30, 0, 0, 7);
+  x.fill();
+  x.fillStyle = '#c9952a';
+  x.beginPath();
+  x.ellipse(64, 50, 28, 16, 0, 0, 7);
+  x.fill();
+  x.fillRect(61, 26, 6, 12);
+  laurel(x);
+};
+const RAINBOW = [0xff2638, 0xff9500, 0xffe600, 0x2fd14a, 0x1e90ff, 0xb44dff];
+const rainbowCloud = (x: CanvasRenderingContext2D) => {
+  RAINBOW.forEach((c, i) => {
+    x.strokeStyle = '#' + c.toString(16).padStart(6, '0');
+    x.lineWidth = 7;
+    x.beginPath();
+    x.arc(64, 84, 50 - i * 7, Math.PI, 0);
+    x.stroke();
+  });
+  x.fillStyle = '#fff';
+  for (const [cx, cy, r] of [[24, 88, 14], [40, 80, 16], [52, 92, 13], [100, 90, 12], [88, 86, 12]]) {
+    x.beginPath();
+    x.arc(cx, cy, r, 0, 7);
+    x.fill();
+  }
+};
+const place = (m: THREE.Object3D, parent: THREE.Object3D, pos: number[], rot: number[] = [0, 0, 0]) => {
+  m.position.set(pos[0], pos[1], pos[2]);
+  m.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(m);
+  return m;
+};
+
 function general(): THREE.Group {
   const g = new THREE.Group();
-  const cream = 0xfff3d6, maroon = 0xff2638, gold = 0xffc928;
-  const d = base(g, maroon, cream, gold);
-  add(g, box(1.1, 0.3, 1.2), mat(maroon), [0, 0.5, -1.4], [0.15, 0, 0]);
+  const cream = 0xf4e4c0, red = 0xe0213a, gold = 0xffc928, dark = 0x2c2c34;
+  const amber = mat(0xffb400, { emissive: 0xff8a00, emissiveIntensity: 1.4 });
+  const d = base(g, cream, red, gold);
+  wheelRings(g, cream);
+  // kanciaste burty: ostry nos, niski kokpit, wysoki tył z czerwonym pasem
+  sidePanels(g, [[-2.15, 0.2], [-2.0, 0.34], [-1.2, 0.8], [-0.9, 0.8], [-0.5, 0.5], [0.55, 0.5], [0.95, 0.9], [1.6, 0.9], [1.65, 0.24]], cream);
   for (const s of [-1, 1]) {
-    add(g, box(0.5, 0.55, 0.12), mat(cream), [s * 0.55, 0.6, -1.9], [0.2, s * 0.3, s * 0.2]);
-    add(g, box(0.12, 0.4, 0.9), mat(cream), [s * 0.5, 0.6, 1.5]);
+    // dwa „kły" przedniej osłony z ciemnymi wlotami
+    add(g, box(0.52, 0.42, 1.0), mat(cream), [s * 0.42, 0.52, -1.55], [0.28, -s * 0.22, 0]);
+    add(g, box(0.34, 0.07, 0.06), mat(dark), [s * 0.44, 0.44, -2.02], [0.28, -s * 0.22, 0]);
+    add(g, box(0.34, 0.07, 0.06), mat(dark), [s * 0.44, 0.56, -1.98], [0.28, -s * 0.22, 0]);
+    add(g, box(0.03, 0.3, 0.5), mat(red), [s * 0.8, 0.6, 1.3]);
+    for (const k of [0, 1]) add(g, box(0.03, 0.2, 0.07), mat(dark), [s * 0.8, 0.42, 0.25 + k * 0.16], [0.5, 0, 0]);
+    add(g, sph(0.07, 6, 4), mat(gold, { metalness: 0.7 }), [s * 0.8, 0.36, -1.0]);
+    add(g, sph(0.07, 6, 4), mat(gold, { metalness: 0.7 }), [s * 0.84, 0.4, 0.95]);
+    // tylne skrzydło na wspornikach
+    add(g, box(0.08, 0.75, 0.12), mat(cream), [s * 0.5, 1.15, 1.6], [0.35, 0, 0]);
+    add(g, box(0.07, 0.34, 0.62), mat(red), [s * 0.98, 1.5, 1.85]);
   }
-  add(g, box(1.7, 0.08, 0.55), mat(maroon), [0, 1.3, 1.6], [0.1, 0, 0]);
-  add(d, box(0.7, 0.8, 0.45), mat(cream), [0, 0.5, 0.05]);
-  add(d, sph(0.34), mat(0x2b2b31), [0, 1.15, -0.05]);
-  add(d, box(0.4, 0.4, 0.15), mat(cream), [0, 1.1, -0.32]);
-  for (const s of [-1, 1]) {
-    add(d, sph(0.06, 6, 4), mat(0xe8a317, { emissive: 0xaa6600 }), [s * 0.13, 1.2, -0.4]);
-    add(d, cone(0.1, 0.55, 5), mat(cream), [s * 0.4, 1.5, -0.05], [0, 0, -s * 0.55]);
-    add(d, cone(0.07, 0.4, 5), mat(cream), [s * 0.34, 1.35, 0.1], [0, 0, -s * 0.9]);
-    add(d, sph(0.13, 6, 4), mat(gold), [s * 0.45, 0.85, 0.0]);
-  }
-  add(d, cone(0.1, 0.4, 4), mat(maroon), [0, 1.62, -0.1]);
-  const cape = add(d, box(1.1, 0.95, 0.08), mat(maroon, { side: THREE.DoubleSide }), [0, 0.45, 0.42], [-0.18, 0, 0]);
+  add(g, box(0.24, 0.3, 1.15), mat(red), [0, 0.5, -1.6], [0.3, 0, 0]); // czerwony klin na nosie
+  add(g, box(1.95, 0.09, 0.55), mat(red), [0, 1.5, 1.85], [0.08, 0, 0]);
+  // tył: beżowa rama i złote żebra
+  add(g, box(1.3, 0.5, 0.12), mat(cream), [0, 0.62, 1.66]);
+  for (let k = 0; k < 3; k++) add(g, box(0.8, 0.05, 0.05), mat(gold, { metalness: 0.6 }), [0, 0.5 + k * 0.12, 1.74]);
+  add(g, box(0.5, 0.16, 0.1), mat(dark), [0, 0.32, 1.72]);
+  // kierowca: czteroręki generał w zbroi, z peleryną i pagonami
+  add(d, box(0.62, 0.7, 0.42), mat(dark), [0, 0.42, 0.05]);
+  add(d, box(0.5, 0.36, 0.1), mat(cream), [0, 0.55, -0.2]);
+  add(d, box(0.3, 0.2, 0.1), mat(cream), [0, 0.26, -0.2]);
+  const cape = add(d, box(1.35, 1.05, 0.08), mat(red, { side: THREE.DoubleSide }), [0, 0.42, 0.44], [-0.18, 0, 0]);
   cape.name = 'cape';
+  place(badge(laurel, 0.5, 0.5), cape, [0, 0.05, 0.05]);
+  add(d, box(1.3, 0.14, 0.5), mat(red), [0, 0.86, 0.2], [0.1, 0, 0]); // kołnierz peleryny
+  for (const s of [-1, 1]) {
+    add(d, box(0.4, 0.5, 0.6), mat(red), [s * 0.56, 0.62, 0.12], [0, 0, s * 0.25]);
+    add(d, cyl(0.2, 0.22, 0.09, 8), mat(gold, { metalness: 0.6 }), [s * 0.56, 0.95, 0.02]);
+    for (let k = 0; k < 4; k++) add(d, box(0.05, 0.12, 0.05), mat(gold), [s * (0.44 + k * 0.08), 0.86, -0.2]);
+    // dolna para rąk
+    add(d, cyl(0.065, 0.065, 0.62, 6), mat(cream), [s * 0.3, 0.3, -0.36], [-1.3, 0, s * 0.2]);
+    add(d, sph(0.09, 6, 4), mat(gold, { metalness: 0.6 }), [s * 0.34, 0.36, -0.1]);
+    add(d, sph(0.1, 6, 4), mat(cream), [s * 0.26, 0.4, -0.66]);
+    add(d, sph(0.1, 6, 4), mat(cream), [s * 0.36, 0.72, -0.66]);
+    add(d, sph(0.09, 6, 4), mat(gold, { metalness: 0.6 }), [s * 0.4, 0.62, -0.05]);
+    // hełm: rogi, płyty czoła, skośne bursztynowe oczy, słuchawka z laurem
+    add(d, cone(0.1, 0.7, 4), mat(cream), [s * 0.46, 1.52, 0.02], [0.15, 0, -s * 0.55]);
+    add(d, cone(0.08, 0.45, 4), mat(cream), [s * 0.4, 1.36, 0.22], [0.5, 0, -s * 0.8]);
+    add(d, box(0.2, 0.1, 0.55), mat(cream), [s * 0.17, 1.46, -0.1], [-0.25, 0, s * 0.3]);
+    add(d, box(0.15, 0.06, 0.03), amber, [s * 0.12, 1.2, -0.39], [0, 0, s * 0.4]);
+    add(d, box(0.14, 0.2, 0.14), mat(cream), [s * 0.2, 1.08, -0.3], [0, 0, s * 0.2]);
+    add(d, cyl(0.13, 0.13, 0.08, 10), mat(dark), [s * 0.36, 1.14, 0.06], [0, 0, Math.PI / 2]);
+    add(d, new THREE.TorusGeometry(0.1, 0.025, 6, 10), mat(gold, { metalness: 0.7 }), [s * 0.4, 1.14, 0.06], [0, Math.PI / 2, 0]);
+  }
+  add(d, sph(0.36), mat(dark), [0, 1.2, 0.0]);
+  add(d, box(0.4, 0.2, 0.12), mat(cream), [0, 1.3, -0.32], [-0.15, 0, 0]);
+  add(d, box(0.26, 0.24, 0.12), mat(cream), [0, 0.98, -0.34]);
+  for (let k = -1; k <= 1; k++) add(d, box(0.035, 0.16, 0.02), mat(dark), [k * 0.07, 0.97, -0.405]);
+  add(d, box(0.09, 0.42, 0.7), mat(red), [0, 1.6, -0.02], [-0.2, 0, 0]); // czerwony grzebień
   arms(d, cream);
   return g;
 }
 
 function gryzek(): THREE.Group {
   const g = new THREE.Group();
-  const wal = 0xff8a1f, teal = 0x12c9a0, gold = 0xffc928;
-  const d = base(g, wal, teal, gold);
-  const shell = add(g, sph(1, 12, 9), mat(wal), [0, 0.8, 0.1]);
-  shell.scale.set(0.95, 0.55, 1.55);
-  add(g, box(1.1, 0.12, 1.4), mat(teal), [0, 0.78, 0.25]);
-  const n7 = label('7', '#fff6dc', '#0a9d7c', 0.5, 0.5);
-  n7.position.set(0, 0.75, -1.55);
-  n7.rotation.set(-0.35, Math.PI, 0);
-  g.add(n7);
-  for (const s of [-1, 1]) add(g, cyl(0.12, 0.12, 0.3, 8), mat(gold, { metalness: 0.7 }), [s * 0.4, 0.55, 1.65], [Math.PI / 2, 0, 0]);
-  add(d, box(0.7, 0.55, 0.5), mat(0xe9dcc0), [0, 0.35, 0.05]);
-  const hd = add(d, sph(0.42, 12, 9), mat(0xd9732a), [0, 0.95, -0.05]);
-  hd.scale.set(1.0, 0.92, 1.0);
-  add(d, sph(0.38, 10, 7), mat(0x3a2418), [0, 1.15, 0.12]);
-  add(d, box(0.2, 0.5, 0.3), mat(0xf3ead6), [0, 0.95, -0.28]);
-  add(d, sph(0.14, 8, 6), mat(0xf3ead6), [0, 0.8, -0.38]);
-  add(d, sph(0.05, 6, 4), mat(0xd98a8a), [0, 0.86, -0.5]);
-  for (const s of [-1, 1]) {
-    add(d, sph(0.06, 6, 4), mat(0x111111), [s * 0.17, 1.02, -0.4]);
-    add(d, sph(0.12, 6, 5), mat(0x8c4a4a), [s * 0.36, 1.3, 0.0]);
-    add(d, new THREE.TorusGeometry(0.14, 0.04, 6, 10), mat(gold, { metalness: 0.7 }), [s * 0.18, 1.32, -0.28], [0.3, 0, 0]);
-    add(d, cyl(0.12, 0.12, 0.04, 10), mat(0x12c9a0, { emissive: 0x0a6a55 }), [s * 0.18, 1.32, -0.3], [Math.PI / 2 + 0.3, 0, 0]);
+  const wal = 0xc8682a, walDark = 0x9a4c1c, teal = 0x10b8a6, gold = 0xffc928, cream = 0xfff0d6, fur = 0x4a2d1e, ginger = 0xee8a2e, leather = 0x6b3d22;
+  const d = base(g, walDark, teal, gold);
+  wheelRings(g, gold);
+  // łupina orzecha: otwarta miska z turkusową wyściółką na krawędzi
+  const bowl = add(g, new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, Math.PI * 0.36, Math.PI * 0.64), mat(wal, { side: THREE.DoubleSide }), [0, 0.66, 0.05]);
+  bowl.scale.set(1.0, 0.62, 1.78);
+  const rim = add(g, new THREE.TorusGeometry(1, 0.085, 6, 24), mat(teal), [0, 0.93, 0.05], [Math.PI / 2, 0, 0]);
+  rim.scale.set(0.9, 1.6, 1.2);
+  // bruzdy łupiny
+  for (const z of [-1.0, -0.35, 0.4, 1.05]) {
+    const r = add(g, new THREE.TorusGeometry(1, 0.025, 4, 20, Math.PI), mat(walDark), [0, 0.68, z], [0, 0, Math.PI]);
+    const k = Math.sqrt(Math.max(0.05, 1 - ((z - 0.05) / 1.78) ** 2));
+    r.scale.set(1.0 * k, 0.62 * k, 1);
   }
-  add(d, new THREE.TorusGeometry(0.34, 0.1, 6, 12), mat(teal), [0, 0.62, -0.02], [Math.PI / 2, 0, 0]);
-  add(d, box(0.25, 0.04, 0.6), mat(teal), [0.3, 0.7, 0.45], [0, -0.5, 0.2]);
-  arms(d, 0xe9dcc0);
+  // podwyższony tył łupiny i oparcie
+  const back = add(g, sph(0.72, 12, 8), mat(wal), [0, 1.0, 1.5]);
+  back.scale.set(1.0, 0.75, 0.4);
+  add(g, box(0.95, 0.62, 0.2), mat(teal), [0, 1.05, 1.12], [-0.15, 0, 0]);
+  // siódemka z przodu i na bokach, złote reflektory
+  place(badge(disc('7', '#0a8f7f'), 0.5, 0.5), g, [0, 0.66, -1.74], [0.35, Math.PI, 0]);
+  for (const s of [-1, 1]) {
+    place(badge(disc('7', '#0a8f7f'), 0.46, 0.46), g, [s * 1.0, 0.62, 0.05], [0, s * (Math.PI / 2), 0]);
+    add(g, cyl(0.17, 0.17, 0.14, 10), mat(gold, { metalness: 0.7, roughness: 0.3 }), [s * 0.5, 0.62, -1.55], [Math.PI / 2 - 0.3, 0, -s * 0.4]);
+    add(g, cyl(0.12, 0.12, 0.15, 10), mat(cream, { emissive: 0x554422 }), [s * 0.52, 0.62, -1.58], [Math.PI / 2 - 0.3, 0, -s * 0.4]);
+    add(g, cyl(0.11, 0.11, 0.3, 8), mat(gold, { metalness: 0.7 }), [s * 0.18, 0.42, 1.78], [Math.PI / 2, 0, 0]);
+    add(g, cyl(0.075, 0.075, 0.32, 8), mat(0x1a1a1a), [s * 0.18, 0.42, 1.79], [Math.PI / 2, 0, 0]);
+  }
+  place(badge(acorn, 0.55, 0.55), g, [0, 0.9, 1.79], [-0.1, 0, 0]);
+  add(g, cyl(0.1, 0.14, 0.4, 8), mat(gold, { metalness: 0.7 }), [0.7, 0.8, 1.62], [Math.PI / 2 - 0.3, 0, 0]); // trąbka wydechu
+  // kierowca: trójkolorowa świnka morska w goglach i z turkusową chustą
+  const body = add(d, sph(0.42, 10, 8), mat(cream), [0, 0.38, 0.05]);
+  body.scale.set(1, 0.95, 0.85);
+  add(d, new THREE.TorusGeometry(0.3, 0.1, 6, 12), mat(teal), [0, 0.68, 0.0], [Math.PI / 2, 0, 0]);
+  add(d, box(0.6, 0.05, 0.22), mat(teal), [0.5, 0.74, 0.3], [0, -0.5, 0.25]);
+  add(d, box(0.5, 0.05, 0.18), mat(teal), [0.45, 0.66, 0.42], [0, -0.8, -0.1]);
+  const head = add(d, sph(0.47, 14, 10), mat(cream), [0, 1.1, -0.08]);
+  head.scale.set(0.95, 0.95, 1);
+  add(d, sph(0.43, 12, 9), mat(fur), [0.17, 1.17, 0.06]);
+  add(d, sph(0.43, 12, 9), mat(ginger), [-0.17, 1.17, 0.06]);
+  const blaze = add(d, sph(0.3, 10, 8), mat(cream), [0, 1.28, -0.16]);
+  blaze.scale.set(0.5, 1, 1);
+  const muzzle = add(d, sph(0.24, 10, 8), mat(0xfff6e6), [0, 0.98, -0.4]);
+  muzzle.scale.set(1.35, 0.9, 0.8);
+  add(d, sph(0.05, 6, 4), mat(0xf29aa6), [0, 1.04, -0.6]);
+  add(d, box(0.11, 0.1, 0.03), mat(0xffffff), [0, 0.87, -0.56]);
+  add(d, box(0.012, 0.1, 0.035), mat(0xbbbbbb), [0, 0.87, -0.56]);
+  for (const s of [-1, 1]) {
+    add(d, sph(0.075, 8, 6), mat(0x0e0b0a, { roughness: 0.2 }), [s * 0.25, 1.12, -0.43]);
+    add(d, sph(0.022, 5, 4), mat(0xffffff), [s * 0.23, 1.15, -0.5]);
+    const ear = add(d, sph(0.15, 8, 6), mat(s > 0 ? 0x8c5a5a : 0xf0a184), [s * 0.44, 1.46, 0.06]);
+    ear.scale.set(1, 1, 0.45);
+    // gogle na czole
+    add(d, new THREE.TorusGeometry(0.15, 0.04, 6, 12), mat(gold, { metalness: 0.7, roughness: 0.3 }), [s * 0.17, 1.47, -0.28], [-0.75, 0, 0]);
+    add(d, cyl(0.13, 0.13, 0.05, 12), mat(0x0fb0a0, { emissive: 0x064a44, roughness: 0.15 }), [s * 0.17, 1.47, -0.28], [Math.PI / 2 - 0.75, 0, 0]);
+    add(d, cyl(0.1, 0.1, 0.1, 6), mat(leather), [s * 0.36, 0.42, -0.6], [1.15, 0, 0]); // mankiet
+    add(d, box(0.2, 0.16, 0.34), mat(leather), [s * 0.2, -0.02, -0.72], [0.5, 0, 0]);
+  }
+  add(d, new THREE.TorusGeometry(0.44, 0.045, 5, 16), mat(leather), [0, 1.36, -0.02], [Math.PI / 2 - 0.3, 0, 0]);
+  add(d, box(0.1, 0.1, 0.04), mat(gold, { metalness: 0.7 }), [0, 1.24, 0.4]);
+  arms(d, cream);
   return g;
 }
 
 function runomistrz(): THREE.Group {
   const g = new THREE.Group();
-  const navy = 0x2457ff, gold = 0xffc928, copper = 0xb87333;
+  const navy = 0x2a46c4, navyDark = 0x1b2c80, gold = 0xffc928, copper = 0xe8853a, wine = 0xc0263e, hair = 0xf0ede6, skin = 0xf4c9a4;
+  const tube = () => mat(0x55dcff, { emissive: 0x22aaff, emissiveIntensity: 1.5, transparent: true, opacity: 0.9 });
+  const G = (o: Partial<THREE.MeshStandardMaterialParameters> = {}) => mat(gold, { metalness: 0.7, roughness: 0.3, ...o });
   const d = base(g, navy, gold, gold);
-  add(g, box(1.2, 0.5, 0.2), mat(navy), [0, 0.7, -1.45], [-0.3, 0, 0]);
-  add(g, box(0.5, 0.3, 0.05), mat(gold, { metalness: 0.6 }), [0, 0.78, -1.58], [-0.3, 0, 0]);
+  wheelRings(g, gold);
+  wheelSpokes(g, gold);
+  sidePanels(g, [[-2.05, 0.24], [-2.0, 0.52], [-1.25, 0.88], [-0.75, 0.88], [-0.4, 0.56], [0.5, 0.56], [0.8, 0.98], [1.62, 0.98], [1.64, 0.24]], navy);
   for (const s of [-1, 1]) {
-    add(g, cyl(0.17, 0.17, 0.5, 8), mat(0x33ccff, { emissive: 0x1188cc, emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }), [s * 0.6, 1.0, 1.2]);
-    add(g, cyl(0.2, 0.2, 0.08, 8), mat(gold, { metalness: 0.7 }), [s * 0.6, 1.28, 1.2]);
-    add(g, cyl(0.2, 0.2, 0.08, 8), mat(gold, { metalness: 0.7 }), [s * 0.6, 0.72, 1.2]);
-    add(g, cyl(0.06, 0.06, 0.9, 6), mat(copper, { metalness: 0.8 }), [s * 0.3, 0.8, 1.3], [Math.PI / 2, 0, 0]);
-    add(g, box(0.08, 0.06, 1.2), mat(gold), [s * 0.78, 0.5, 0.0]);
+    // złote okucia burt, runy, zębatka przy kokpicie
+    add(g, box(0.04, 0.05, 3.6), G(), [s * 0.8, 0.27, -0.2]);
+    add(g, box(0.04, 0.05, 1.0), G(), [s * 0.8, 0.57, 0.05]);
+    add(g, box(0.04, 0.05, 0.85), G(), [s * 0.8, 0.98, 1.2]);
+    place(badge(runes, 1.0, 1.0), g, [s * 0.805, 0.42, 0.15], [0, s * (Math.PI / 2), 0]);
+    add(g, cyl(0.2, 0.2, 0.06, 10), G(), [s * 0.82, 0.78, 0.62], [0, 0, Math.PI / 2]);
+    for (let k = 0; k < 8; k++) add(g, box(0.06, 0.08, 0.07), G(), [s * 0.82, 0.78 + Math.sin((k * Math.PI) / 4) * 0.22, 0.62 + Math.cos((k * Math.PI) / 4) * 0.22], [(-k * Math.PI) / 4, 0, 0]);
+    // reflektory
+    add(g, cyl(0.17, 0.17, 0.16, 10), G(), [s * 0.52, 0.5, -1.98], [Math.PI / 2, 0, 0]);
+    add(g, cyl(0.12, 0.12, 0.17, 10), mat(0xfff0b0, { emissive: 0xffc040, emissiveIntensity: 1.2 }), [s * 0.52, 0.5, -2.0], [Math.PI / 2, 0, 0]);
+    // świecące lampy elektronowe ze złotymi kapslami
+    add(g, cyl(0.15, 0.15, 0.48, 10), tube(), [s * 0.62, 1.22, 1.25]);
+    add(g, cyl(0.19, 0.19, 0.09, 10), G(), [s * 0.62, 1.5, 1.25]);
+    add(g, cyl(0.19, 0.19, 0.09, 10), G(), [s * 0.62, 0.95, 1.25]);
+    add(g, cyl(0.07, 0.12, 0.14, 8), G(), [s * 0.62, 1.6, 1.25]);
+    add(g, sph(0.07, 6, 5), G(), [s * 0.62, 1.7, 1.25]);
+    // miedziane rury: od lamp do kotła i w dół po bokach
+    add(g, cyl(0.055, 0.055, 0.75, 6), mat(copper, { metalness: 0.75, roughness: 0.3 }), [s * 0.36, 1.1, 1.32], [0, 0, Math.PI / 2]);
+    add(g, cyl(0.055, 0.055, 0.5, 6), mat(copper, { metalness: 0.75, roughness: 0.3 }), [s * 0.74, 0.86, 1.6]);
+    add(g, sph(0.075, 6, 5), mat(copper, { metalness: 0.75 }), [s * 0.74, 1.1, 1.6]);
+    add(g, cyl(0.055, 0.055, 0.9, 6), mat(copper, { metalness: 0.75, roughness: 0.3 }), [s * 0.5, 1.0, 0.75], [Math.PI / 2, 0, 0]);
+    add(g, box(0.16, 0.1, 0.04), mat(0xff3030, { emissive: 0xcc0000 }), [s * 0.5, 0.42, 1.69]);
+    place(badge(runes, 0.5, 0.5), g, [s * 0.4, 0.62, 1.69]);
   }
-  add(g, cyl(0.38, 0.38, 0.12, 12), mat(gold, { metalness: 0.7 }), [0, 1.0, 1.55], [Math.PI / 2, 0, 0], 'gear');
-  add(g, cyl(0.55, 0.55, 0.5, 8), mat(0x2a2a30), [0, 0.8, 1.35]);
-  add(d, box(0.75, 0.8, 0.48), mat(navy), [0, 0.5, 0.05]);
-  add(d, box(0.78, 0.12, 0.5), mat(0xff2638), [0, 0.88, 0.05]);
-  add(d, sph(0.34, 10, 8), mat(0xf0c9a8), [0, 1.2, -0.05]);
-  add(d, cone(0.3, 0.55, 6), mat(0xeeeeee), [0, 0.95, -0.28], [Math.PI + 0.25, 0, 0]);
-  add(d, sph(0.14, 6, 5), mat(0xeeeeee), [0, 1.0, -0.35]);
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    add(d, new THREE.IcosahedronGeometry(0.2, 0), mat(0xe8e6e0), [Math.cos(a) * 0.3, 1.48 + (i % 2) * 0.05, Math.sin(a) * 0.3 + 0.05]);
+  // przednia tarcza z runą-drzewem, zderzak z półzębatką
+  add(g, box(0.72, 0.62, 0.08), mat(navy), [0, 0.78, -1.5], [-0.42, 0, 0]);
+  add(g, box(0.8, 0.06, 0.1), G(), [0, 1.04, -1.37], [-0.42, 0, 0]);
+  place(badge(runeTree, 0.5, 0.5), g, [0, 0.8, -1.56], [0.42, Math.PI, 0]);
+  add(g, box(1.7, 0.09, 0.1), G(), [0, 0.3, -2.08]);
+  add(g, cyl(0.26, 0.26, 0.06, 12), G(), [0, 0.3, -2.06], [Math.PI / 2, 0, 0]);
+  add(g, box(1.5, 0.3, 0.1), mat(navyDark), [0, 0.5, -2.0]);
+  // kocioł i wielka zębatka z tyłu
+  add(g, cyl(0.46, 0.46, 0.7, 10), mat(0x33343c, { metalness: 0.4 }), [0, 0.95, 1.3]);
+  add(g, cyl(0.4, 0.4, 0.1, 12), G(), [0, 1.05, 1.7], [Math.PI / 2, 0, 0], 'gear');
+  for (let k = 0; k < 10; k++) add(g, box(0.1, 0.1, 0.1), G(), [Math.cos((k * Math.PI) / 5) * 0.43, 1.05 + Math.sin((k * Math.PI) / 5) * 0.43, 1.7], [0, 0, (k * Math.PI) / 5]);
+  add(g, box(1.5, 0.5, 0.08), mat(navy), [0, 0.52, 1.64]);
+  for (let k = -3; k <= 3; k++) add(g, box(0.035, 0.2, 0.03), G(), [k * 0.07, 0.36, 1.69]);
+  // kierowca: siwy mag w goglach, z brodą i monoklem
+  add(d, box(0.76, 0.8, 0.48), mat(navy), [0, 0.5, 0.05]);
+  add(d, box(0.05, 0.7, 0.02), G(), [0, 0.5, -0.2]);
+  add(d, new THREE.TorusGeometry(0.32, 0.11, 6, 12), mat(wine), [0, 0.9, 0.04], [Math.PI / 2, 0, 0]);
+  add(d, box(0.5, 0.4, 0.06), mat(wine), [0.22, 0.72, 0.3], [0.2, 0, -0.2]);
+  add(d, sph(0.36, 12, 9), mat(skin), [0, 1.2, -0.05]);
+  add(d, sph(0.08, 6, 5), mat(0xeeb48c), [0, 1.14, -0.42]);
+  // rozwiana czupryna do tyłu
+  const H: number[][] = [[0, 1.55, 0.05, 0.3], [-0.26, 1.5, 0.0, 0.24], [0.26, 1.5, 0.0, 0.24], [-0.36, 1.32, 0.12, 0.22], [0.36, 1.32, 0.12, 0.22], [0, 1.45, 0.3, 0.3], [-0.24, 1.3, 0.36, 0.24], [0.24, 1.3, 0.36, 0.24], [0, 1.2, 0.45, 0.24], [0.12, 1.66, -0.12, 0.18], [-0.14, 1.64, -0.14, 0.17]];
+  for (const h of H) add(d, new THREE.IcosahedronGeometry(h[3], 0), mat(hair), [h[0], h[1], h[2]]);
+  // broda, wąsy, groźne brwi
+  add(d, cone(0.3, 0.6, 7), mat(hair), [0, 0.9, -0.26], [Math.PI + 0.25, 0, 0]);
+  for (const s of [-1, 1]) {
+    const m = add(d, sph(0.14, 8, 6), mat(hair), [s * 0.14, 1.06, -0.4]);
+    m.scale.set(1.5, 0.6, 0.7);
+    m.rotation.z = -s * 0.35;
+    add(d, box(0.2, 0.055, 0.05), mat(hair), [s * 0.15, 1.3, -0.38], [0, 0, s * 0.4]);
+    add(d, sph(0.045, 6, 4), mat(0x2a4a8a), [s * 0.14, 1.22, -0.38]);
+    add(d, sph(0.09, 6, 5), mat(skin), [s * 0.37, 1.18, 0.0]);
+    // gogle na czole
+    add(d, new THREE.TorusGeometry(0.13, 0.04, 6, 12), G(), [s * 0.16, 1.45, -0.27], [-0.6, 0, 0]);
+    add(d, cyl(0.11, 0.11, 0.05, 12), mat(0x3aa0e0, { emissive: 0x0a3a66, roughness: 0.15 }), [s * 0.16, 1.45, -0.27], [Math.PI / 2 - 0.6, 0, 0]);
+    // miedziane rękawice z nitami
+    add(d, cyl(0.12, 0.1, 0.3, 8), mat(copper, { metalness: 0.75, roughness: 0.3 }), [s * 0.36, 0.44, -0.56], [1.15, 0, s * 0.12]);
+    add(d, sph(0.11, 6, 5), mat(navyDark), [s * 0.34, 0.36, -0.72]);
+    add(d, box(0.2, 0.2, 0.42), mat(0x6b3d22), [s * 0.2, 0.0, -0.66], [0.4, 0, 0]);
+    add(d, box(0.22, 0.06, 0.1), G(), [s * 0.2, 0.08, -0.6], [0.4, 0, 0]);
+    add(d, sph(0.14, 8, 6), mat(navy), [s * 0.42, 0.78, 0.0]);
+    add(d, new THREE.TorusGeometry(0.1, 0.02, 5, 10), G(), [s * 0.44, 0.62, -0.2], [1.15, 0, 0]);
   }
-  add(d, new THREE.IcosahedronGeometry(0.26, 0), mat(0xe8e6e0), [0, 1.55, 0.05]);
-  add(d, new THREE.TorusGeometry(0.17, 0.04, 6, 10), mat(gold, { metalness: 0.7 }), [0, 1.42, -0.3], [0.3, 0, 0]);
-  for (const s of [-1, 1]) add(d, box(0.14, 0.04, 0.04), mat(0xe8e6e0), [s * 0.1, 1.28, -0.38], [0, 0, s * 0.3]);
+  add(d, new THREE.TorusGeometry(0.075, 0.015, 5, 12), G(), [-0.14, 1.22, -0.41]); // monokl
+  add(d, cyl(0.008, 0.008, 0.3, 4), G(), [-0.22, 1.08, -0.38], [0, 0, 0.3]);
+  add(d, new THREE.TorusGeometry(0.36, 0.035, 5, 16), mat(0x6b3d22), [0, 1.4, -0.03], [Math.PI / 2 - 0.25, 0, 0]);
   arms(d, navy);
   return g;
 }
 
 function teczka(): THREE.Group {
   const g = new THREE.Group();
-  const teal = 0x00d8c8, gold = 0xffc928;
-  const rainbow = [0xff2638, 0xff9500, 0xffe600, 0x2fd14a, 0x1e90ff, 0xb44dff];
+  const teal = 0x12cfc0, tealDark = 0x0a9a90, gold = 0xffc928, steel = 0x9aa1ad, hairC = 0x2a55e6, skin = 0xf7c8a4, coral = 0xff6b5a, leather = 0x7a4a2a;
   const d = base(g, teal, teal, gold);
-  add(g, box(1.2, 0.3, 1.1), mat(teal), [0, 0.52, -1.4], [0.12, 0, 0]);
-  add(g, box(0.8, 0.2, 0.05), mat(0xf1e8d0), [0, 0.5, -1.97], [0.12, 0, 0]);
-  rainbow.forEach((c, i) => {
-    for (const s of [-1, 1]) add(g, box(0.04, 0.05, 2.0), mat(c), [s * 0.76, 0.34 + i * 0.05, 0.1]);
-    add(g, box(1.7, 0.04, 0.09), mat(c), [0, 1.18 - i * 0.045 + 0.0, 1.72], [0.1, 0, 0]);
-  });
-  add(g, box(1.8, 0.35, 0.08), mat(teal), [0, 1.0, 1.65], [0.1, 0, 0]);
-  rainbow.forEach((c, i) => add(g, box(1.8, 0.04, 0.09), mat(c), [0, 0.88 + i * 0.05, 1.7], [0.1, 0, 0]));
+  wheelRings(g, gold);
+  sidePanels(g, [[-2.05, 0.24], [-1.95, 0.56], [-1.3, 0.82], [-0.9, 0.82], [-0.45, 0.5], [0.25, 0.5], [0.9, 1.02], [1.38, 0.92], [1.48, 0.24]], teal);
   for (const s of [-1, 1]) {
-    add(g, box(0.06, 0.55, 0.08), mat(0x888888), [s * 0.6, 0.75, 1.5]);
-    add(g, cyl(0.1, 0.1, 0.4, 8), mat(0x777777, { metalness: 0.8 }), [s * 0.25, 0.55, 1.6], [Math.PI / 2, 0, 0]);
+    // tęczowy łuk na burcie
+    RAINBOW.forEach((c, i) => add(g, new THREE.TorusGeometry(0.7 - i * 0.075, 0.04, 4, 18, Math.PI), mat(c), [s * 0.8, 0.27, 0.62], [0, Math.PI / 2, 0]));
+    add(g, box(0.34, 0.14, 0.05), mat(0xfff0d0), [s * 0.58, 0.4, -2.17]); // kratki wlotów
+    add(g, box(0.34, 0.03, 0.06), mat(tealDark), [s * 0.58, 0.4, -2.18]);
+    add(g, box(0.1, 0.3, 0.12), mat(teal), [s * 0.86, 0.98, -0.55], [0, 0, s * 0.2]); // lusterka
+    add(g, sph(0.05, 6, 4), mat(gold, { metalness: 0.7 }), [s * 0.8, 0.7, -1.2]);
+    // silnik: rury, tłumiki, wsporniki skrzydła
+    add(g, cyl(0.12, 0.12, 0.4, 10), mat(steel, { metalness: 0.8, roughness: 0.3 }), [s * 0.2, 0.52, 1.78], [Math.PI / 2, 0, 0]);
+    add(g, cyl(0.085, 0.085, 0.42, 10), mat(0x1c1c20), [s * 0.2, 0.52, 1.79], [Math.PI / 2, 0, 0]);
+    add(g, cyl(0.06, 0.06, 1.0, 6), mat(steel, { metalness: 0.8 }), [s * 0.5, 0.75, 1.2], [Math.PI / 2 - 0.2, 0, 0]);
+    add(g, cyl(0.045, 0.045, 0.75, 6), mat(steel, { metalness: 0.8 }), [s * 0.62, 0.98, 1.62], [0.25, 0, 0]);
+    add(g, box(0.07, 0.42, 0.6), mat(teal), [s * 0.98, 1.34, 1.82], [0.2, 0, 0]);
+    add(g, cyl(0.05, 0.05, 0.3, 6), mat(gold, { metalness: 0.7 }), [s * 0.7, 0.5, 1.5], [Math.PI / 2, 0, 0]);
   }
-  add(d, box(0.7, 0.7, 0.45), mat(teal), [0, 0.45, 0.05]);
-  add(d, box(0.5, 0.2, 0.4), mat(0xf26b5b), [0, 0.12, -0.2]);
-  add(d, sph(0.33, 10, 8), mat(0xf0c0a0), [0, 1.1, -0.05]);
-  add(d, sph(0.38, 8, 6), mat(0x2a3fd0), [0, 1.22, 0.1]);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    add(d, new THREE.IcosahedronGeometry(0.2, 0), mat(0x2a3fd0), [Math.cos(a) * 0.32, 1.28, Math.sin(a) * 0.32 + 0.05]);
+  // nos z tęczą i chmurką, szeroki przedni zderzak
+  add(g, box(1.15, 0.3, 1.0), mat(teal), [0, 0.52, -1.5], [-0.14, 0, 0]);
+  place(badge(rainbowCloud, 0.7, 0.7), g, [0, 0.7, -1.55], [-Math.PI / 2 - 0.14, 0, Math.PI]);
+  add(g, box(1.85, 0.3, 0.32), mat(teal), [0, 0.4, -2.0]);
+  add(g, box(0.5, 0.12, 0.2), mat(tealDark), [0, 0.3, -2.1]);
+  // blok silnika, czerwona lampa, tylne skrzydło z tęczą
+  add(g, box(0.95, 0.5, 0.62), mat(0x5a606c, { metalness: 0.5 }), [0, 0.72, 1.36]);
+  for (let k = 0; k < 4; k++) add(g, box(0.7, 0.03, 0.05), mat(steel, { metalness: 0.7 }), [0, 0.6 + k * 0.08, 1.69]);
+  add(g, box(0.4, 0.12, 0.06), mat(0xff3030, { emissive: 0xcc0000 }), [0, 1.02, 1.68]);
+  add(g, box(1.9, 0.09, 0.5), mat(teal), [0, 1.36, 1.84], [0.2, 0, 0]);
+  add(g, box(1.9, 0.3, 0.07), mat(teal), [0, 1.25, 2.06]);
+  RAINBOW.forEach((c, i) => {
+    add(g, box(1.8, 0.04, 0.03), mat(c), [0, 1.36 - i * 0.045, 2.1]);
+    add(g, box(0.07, 0.03, 0.5), mat(c), [-0.75 + i * 0.075, 1.42, 1.84], [0.2, 0, 0]);
+  });
+  add(g, box(0.8, 0.75, 0.14), mat(0x6a707c), [0, 1.0, 0.98], [-0.12, 0, 0]); // fotel
+  // kierowca: dziewczyna z burzą niebieskich włosów, tęczową grzywką i goglami
+  add(d, box(0.66, 0.66, 0.44), mat(teal), [0, 0.42, 0.05]);
+  for (const s of [-1, 1]) {
+    add(d, box(0.08, 0.66, 0.46), mat(leather), [s * 0.2, 0.42, 0.05]); // szelki
+    add(d, box(0.09, 0.09, 0.03), mat(gold, { metalness: 0.7 }), [s * 0.2, 0.55, -0.19]);
+    add(d, cyl(0.11, 0.1, 0.62, 8), mat(coral), [s * 0.18, 0.06, -0.42], [1.25, 0, 0]);
+    add(d, box(0.2, 0.2, 0.36), mat(teal), [s * 0.18, -0.04, -0.82], [0.3, 0, 0]);
+    add(d, box(0.21, 0.05, 0.14), mat(0xffe600), [s * 0.18, 0.06, -0.8], [0.3, 0, 0]);
+    add(d, sph(0.15, 8, 6), mat(teal), [s * 0.42, 0.66, 0.0]);
+    add(d, sph(0.11, 6, 5), mat(leather), [s * 0.35, 0.36, -0.7]); // rękawiczka
+    add(d, cyl(0.09, 0.09, 0.1, 6), mat(0xff6b5a), [s * 0.36, 0.44, -0.56], [1.15, 0, 0]);
+    // oczy, brwi
+    const eye = add(d, sph(0.07, 8, 6), mat(0x1c62d8, { roughness: 0.2 }), [s * 0.15, 1.17, -0.33]);
+    eye.scale.set(1, 1.2, 0.5);
+    add(d, sph(0.03, 6, 4), mat(0x10131c), [s * 0.15, 1.17, -0.37]);
+    add(d, box(0.15, 0.03, 0.03), mat(0x1c3fb0), [s * 0.15, 1.28, -0.34], [0, 0, s * 0.25]);
+    // gogle na włosach
+    add(d, new THREE.TorusGeometry(0.14, 0.04, 6, 12), mat(gold, { metalness: 0.7, roughness: 0.3 }), [s * 0.17, 1.58, -0.2], [-1.0, 0, 0]);
+    add(d, cyl(0.12, 0.12, 0.05, 12), mat(0x14c8b8, { emissive: 0x075a52, roughness: 0.15 }), [s * 0.17, 1.58, -0.2], [Math.PI / 2 - 1.0, 0, 0]);
   }
-  rainbow.forEach((c, i) => add(d, box(0.5, 0.045, 0.12), mat(c), [-0.25, 1.52 - i * 0.045, -0.2 + i * 0.02], [0, 0, 0.3]));
-  add(d, new THREE.TorusGeometry(0.17, 0.04, 6, 10), mat(gold, { metalness: 0.7 }), [0, 1.4, -0.28], [0.3, 0, 0]);
-  add(d, box(0.1, 0.1, 0.02), mat(0xfb8c00), [0.18, 1.0, -0.37]);
-  arms(d, teal);
+  add(d, sph(0.35, 12, 9), mat(skin), [0, 1.15, -0.03]);
+  add(d, sph(0.04, 6, 4), mat(0xeeb08c), [0, 1.1, -0.38]);
+  add(d, box(0.14, 0.025, 0.03), mat(0xc0504a), [0, 1.0, -0.34]);
+  // włosy: duża czupryna z kosmykami po bokach i z tyłu
+  const HB: number[][] = [[0, 1.42, 0.08, 0.36], [-0.3, 1.3, 0.1, 0.27], [0.3, 1.3, 0.1, 0.27], [-0.4, 1.08, 0.12, 0.2], [0.4, 1.08, 0.12, 0.2], [0, 1.25, 0.34, 0.32], [-0.26, 1.08, 0.36, 0.24], [0.26, 1.08, 0.36, 0.24], [0, 0.98, 0.4, 0.22], [0.22, 1.52, -0.14, 0.2], [-0.42, 1.2, -0.1, 0.16], [0.44, 1.2, -0.08, 0.16]];
+  for (const h of HB) add(d, new THREE.IcosahedronGeometry(h[3], 0), mat(hairC), [h[0], h[1], h[2]]);
+  // tęczowa grzywka zaczesana na bok
+  RAINBOW.forEach((c, i) => add(d, box(0.42, 0.05, 0.14), mat(c), [-0.16, 1.5 - i * 0.045, -0.27 - i * 0.012], [0.25, 0, 0.42]));
+  RAINBOW.slice(0, 4).forEach((c, i) => add(d, box(0.1, 0.022, 0.02), mat(c), [0.24, 1.08 - i * 0.025, -0.28], [0, -0.6, 0.3])); // paski na policzku
+  // tęczowa chusta powiewająca za plecami
+  add(d, new THREE.TorusGeometry(0.27, 0.07, 6, 12), mat(0xff5a8a), [0, 0.8, 0.02], [Math.PI / 2, 0, 0]);
+  RAINBOW.forEach((c, i) => add(d, box(0.06, 0.035, 0.75), mat(c), [0.18 + i * 0.055, 0.92 - i * 0.012, 0.62], [0.12, 0.25, 0]));
+  add(d, new THREE.TorusGeometry(0.37, 0.035, 5, 16), mat(leather), [0, 1.45, 0.0], [Math.PI / 2 - 0.5, 0, 0]);
+  arms(d, skin);
   return g;
 }
-
 
 // okrągła plakietka z literą albo znakiem (rysowana na płótnie)
 function badge(draw: (x: CanvasRenderingContext2D) => void, w = 0.5, h = 0.5) {
@@ -395,19 +665,24 @@ export function makeKart(id: DriverId): THREE.Group {
   return g;
 }
 
+// węzły wyszukujemy raz na kart, a nie w każdej klatce
+interface KartNodes { fw: THREE.Object3D[]; spins: THREE.Object3D[]; sw?: THREE.Object3D; cape?: THREE.Object3D }
 export function steerKart(k: THREE.Object3D, steer: number, spin: number) {
-  for (const n of ['wheel_FL', 'wheel_FR']) {
-    const w = k.getObjectByName(n);
-    if (w) w.rotation.y = steer * 0.45; // steer > 0 = w lewo, tak jak obrót gokarta i kierownicy
+  let n = k.userData.nodes as KartNodes | undefined;
+  if (!n) {
+    const get = (name: string) => k.getObjectByName(name);
+    n = {
+      fw: ['wheel_FL', 'wheel_FR'].map(get).filter(Boolean) as THREE.Object3D[],
+      spins: ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR'].map((w) => get(w)?.getObjectByName('spin')).filter(Boolean) as THREE.Object3D[],
+      sw: get('steering_wheel'),
+      cape: get('cape'),
+    };
+    k.userData.nodes = n;
   }
-  for (const n of ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR']) {
-    const s = k.getObjectByName(n)?.getObjectByName('spin');
-    if (s) s.rotation.x += spin;
-  }
-  const sw = k.getObjectByName('steering_wheel');
-  if (sw) sw.rotation.z = steer * 0.9;
-  const cape = k.getObjectByName('cape');
-  if (cape) cape.rotation.x = -0.18 - Math.min(0.5, Math.abs(spin) * 2);
+  for (const w of n.fw) w.rotation.y = steer * 0.45; // steer > 0 = w lewo, tak jak obrót gokarta i kierownicy
+  for (const w of n.spins) w.rotation.x += spin;
+  if (n.sw) n.sw.rotation.z = steer * 0.9;
+  if (n.cape) n.cape.rotation.x = -0.18 - Math.min(0.5, Math.abs(spin) * 2);
 }
 
 export function addLights(scene: THREE.Scene) {

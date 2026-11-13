@@ -41,6 +41,7 @@ export interface GameOpts {
   hold?: boolean;
   difficulty?: number; // 0 łatwy, 1 średni, 2 trudny
   muted?: boolean;
+  assist?: boolean; // poziom „Początkujący": gra pomaga skręcać
   onDone: (r: Result) => void;
 }
 
@@ -105,6 +106,19 @@ const DIFF = [
   { v: 1.7, g: 2.3, back: 1, push: 1.1, top: 31.2 }, // trudny
 ];
 const NO_INPUT: Input = { thr: 0, brk: 0, st: 0, hb: false };
+// zapis do DOM tylko przy zmianie: mniej pracy przeglądarki w każdej klatce
+const setText = (el: HTMLElement, t: string) => {
+  if ((el as any)._t !== t) {
+    (el as any)._t = t;
+    el.textContent = t;
+  }
+};
+const setStyle = (el: HTMLElement, o: string) => {
+  if ((el as any)._o !== o) {
+    (el as any)._o = o;
+    el.style.opacity = o;
+  }
+};
 
 class Engine {
   ctx: AudioContext | null = null;
@@ -176,6 +190,9 @@ export class Game {
   raceT = -3.5;
   hold = false;
   paused = false;
+  assist = false;
+  private tmpV = new THREE.Vector3();
+  private miniBg: HTMLCanvasElement | null = null;
   level = 0;
   raf = 0;
   last = 0;
@@ -220,6 +237,7 @@ export class Game {
     this.level = o.difficulty ?? 0;
     this.diff = DIFF[this.level] ?? DIFF[0];
     this.engine.muted = !!o.muted;
+    this.assist = !!o.assist;
     const track = o.track;
     this.renderer = new THREE.WebGLRenderer({ canvas: o.canvas, antialias: true });
     this.pr = Math.min(devicePixelRatio, matchMedia('(pointer:coarse)').matches ? 1.25 : 1.5);
@@ -297,6 +315,7 @@ export class Game {
     this.initMini();
     this.addInput();
     this.resize();
+    this.warmUp();
     addEventListener('resize', this.resize);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -306,6 +325,49 @@ export class Game {
   setMuted(m: boolean) {
     this.engine.muted = m;
     this.onMute?.(m);
+  }
+
+  // Rozgrzewka przed startem: kompilujemy shadery i wysyłamy do karty graficznej całą geometrię i tekstury.
+  // Bez tego każdy budynek czy szyld ładuje się dopiero, gdy pierwszy raz pojawi się w kadrze, a to daje przycięcia.
+  private warmUp() {
+    const off: THREE.Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (o.frustumCulled) {
+        o.frustumCulled = false;
+        off.push(o);
+      }
+    });
+    const cam = this.views[0].cam;
+    const k = this.views[0].kart;
+    cam.position.set(k.x, 40, k.z + 1);
+    cam.lookAt(k.x, 0, k.z);
+    cam.updateMatrixWorld();
+    try {
+      this.renderer.compile(this.scene, cam);
+      this.renderer.setRenderTarget(this.mirrorRT);
+      this.renderer.render(this.scene, cam);
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.hudScene, this.hudCam);
+    } catch (e) {
+      console.warn('warm-up', e);
+    }
+    for (const o of off) o.frustumCulled = true;
+  }
+
+  // Poziom „Początkujący": lekkie dociąganie kierownicy w stronę środka jezdni kilkanaście metrów przed kartem.
+  // Im mocniej gracz sam skręca, tym słabsza pomoc.
+  private assistInput(c: Kart, inp: Input): Input {
+    if (c.speed < 2) return inp;
+    const tr = this.track;
+    let ti = c.idx + Math.round((8 + c.speed * 0.6) / SP);
+    ti = tr.closed ? ((ti % tr.N) + tr.N) % tr.N : Math.min(tr.N - 1, ti);
+    const mid = (tr.wp[ti] - tr.wm[ti]) / 2; // środek między bandami (także w szykanie)
+    const tx = tr.pts[ti][0] + tr.nor[ti][0] * mid, tz = tr.pts[ti][1] + tr.nor[ti][1] * mid;
+    let dlt = Math.atan2(-(tx - c.x), -(tz - c.z)) - c.h;
+    dlt = Math.atan2(Math.sin(dlt), Math.cos(dlt));
+    const auto = Math.max(-1, Math.min(1, dlt * 1.7));
+    const w = 0.45 * (1 - 0.5 * Math.abs(inp.st));
+    return { ...inp, st: Math.max(-1, Math.min(1, inp.st + auto * w)) };
   }
 
   // host daje sygnał: wszyscy gotowi, ruszamy odliczanie
@@ -466,6 +528,7 @@ export class Game {
         else if (c.finished !== null) inp = { thr: 0, brk: 1, st: 0, hb: false };
         else if (c.ctrl === 'key') inp = this.keyInput();
         else if (c.ctrl === 'pad') inp = this.net?.padInputs.get(c.padId!) ?? NO_INPUT;
+        if (this.assist && c.finished === null && (c.ctrl === 'key' || c.ctrl === 'pad')) inp = this.assistInput(c, inp);
       }
       this.drive(c, dt, inp);
       if (go && c.finished === null && inp.thr && Math.abs(c.speed) < 1.5) c.stuck += dt;
@@ -698,14 +761,12 @@ export class Game {
     }
     const s = (cv.width - 20) / Math.max(x1 - x0, z1 - z0, 1);
     this.miniBox = { x: (x0 + x1) / 2 - cv.width / 2 / s, z: (z0 + z1) / 2 - cv.height / 2 / s, s };
-  }
-
-  private drawMini() {
-    const m = this.mini;
-    if (!m) return;
-    const { x, z, s } = this.miniBox;
+    const bg = document.createElement('canvas');
+    bg.width = cv.width;
+    bg.height = cv.height;
+    const m = bg.getContext('2d')!;
+    const { x, z } = this.miniBox;
     const tr = this.track;
-    m.clearRect(0, 0, m.canvas.width, m.canvas.height);
     m.lineJoin = 'round';
     for (const [w, col] of [[7, '#000a'], [4, '#fff']] as [number, string][]) {
       m.beginPath();
@@ -715,6 +776,16 @@ export class Game {
       m.strokeStyle = col;
       m.stroke();
     }
+    this.miniBg = bg;
+  }
+
+  private drawMini() {
+    const m = this.mini;
+    if (!m) return;
+    const { x, z, s } = this.miniBox;
+    const tr = this.track;
+    m.clearRect(0, 0, m.canvas.width, m.canvas.height);
+    if (this.miniBg) m.drawImage(this.miniBg, 0, 0);
     const mine = this.views.map((v) => v.kart);
     for (const c of [...this.karts].reverse()) {
       const me = mine.includes(c);
@@ -758,7 +829,7 @@ export class Game {
       dh = Math.atan2(Math.sin(dh), Math.cos(dh));
       v.camH += dh * (1 - Math.exp(-this.dt * 7.5)); // wygładzanie zależne od czasu, nie od liczby klatek
       const back = 7.2 + Math.max(0, p.speed) * 0.04;
-      const target = new THREE.Vector3(p.x + Math.sin(v.camH) * back, 3.3 + p.y + p.speed * 0.012, p.z + Math.cos(v.camH) * back);
+      const target = this.tmpV.set(p.x + Math.sin(v.camH) * back, 3.3 + p.y + p.speed * 0.012, p.z + Math.cos(v.camH) * back);
       v.camPos.lerp(target, v.first ? 1 : 1 - Math.exp(-this.dt * 13));
       v.first = false;
       v.cam.position.copy(v.camPos);
@@ -777,16 +848,16 @@ export class Game {
       r.render(this.scene, v.cam);
 
       const h = v.el;
-      h.speed.textContent = String(Math.round(Math.abs(p.speed) * 3.6));
-      h.pos.textContent = `${sorted.indexOf(p) + 1}/${this.karts.length}`;
-      h.lap.textContent = tr.closed ? `Okr. ${Math.min(tr.laps, p.lap)}/${tr.laps}` : `${Math.max(0, Math.min(100, Math.round((p.prog / (tr.finishIdx - tr.startIdx)) * 100)))}%`;
+      setText(h.speed, String(Math.round(Math.abs(p.speed) * 3.6)));
+      setText(h.pos, `${sorted.indexOf(p) + 1}/${this.karts.length}`);
+      setText(h.lap, tr.closed ? `Okr. ${Math.min(tr.laps, p.lap)}/${tr.laps}` : `${Math.max(0, Math.min(100, Math.round((p.prog / (tr.finishIdx - tr.startIdx)) * 100)))}%`);
       const rt = Math.max(0, p.finished ?? this.raceT);
-      h.time.textContent = `${Math.floor(rt / 60)}:${(rt % 60).toFixed(2).padStart(5, '0')}`;
-      h.count.textContent = this.hold ? 'Czekam na graczy…' : this.raceT < -3 ? '' : this.raceT < -0.1 ? String(Math.ceil(-this.raceT)) : this.raceT < 0.8 ? 'JEDŹ!' : p.finished !== null ? 'META!' : '';
+      setText(h.time, `${Math.floor(rt / 60)}:${(rt % 60).toFixed(1).padStart(4, '0')}`);
+      setText(h.count, this.hold ? 'Czekam na graczy…' : this.raceT < -3 ? '' : this.raceT < -0.1 ? String(Math.ceil(-this.raceT)) : this.raceT < 0.8 ? 'JEDŹ!' : p.finished !== null ? 'META!' : '');
       h.count.classList.toggle('small', this.hold);
-      h.count.style.opacity = this.raceT < 0.8 || p.finished !== null ? '1' : '0';
-      h.warn.style.opacity = p.wrong > 1 && p.finished === null ? '1' : '0';
-      h.draft.style.opacity = String(Math.min(1, p.draft * 1.5));
+      setStyle(h.count, this.raceT < 0.8 || p.finished !== null ? '1' : '0');
+      setStyle(h.warn, p.wrong > 1 && p.finished === null ? '1' : '0');
+      setStyle(h.draft, p.draft > 0.35 ? '1' : '0');
     }
     r.setScissorTest(false);
     r.setViewport(0, 0, W, H);
@@ -796,7 +867,7 @@ export class Game {
       r.render(this.hudScene, this.hudCam);
       r.autoClear = true;
     }
-    this.drawMini();
+    if (this.frameNo % 3 === 0) this.drawMini();
     const p0 = this.views[0].kart;
     this.engine.update(p0.speed, p0.finished === null && p0.ctrl === 'key' ? this.lastThr : 0.4, p0.skid);
   }
