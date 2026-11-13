@@ -190,6 +190,8 @@ export class Game {
   raceT = -3.5;
   hold = false;
   paused = false;
+  // diagnostyka przycięć: ile klatek trwało ponad 50 ms i czy winna była gra (własne obliczenia), czy coś poza nią
+  hitch = { n: 0, own: 0, worst: 0, frames: 0 };
   assist = false;
   private tmpV = new THREE.Vector3();
   private miniBg: HTMLCanvasElement | null = null;
@@ -445,8 +447,18 @@ export class Game {
         }
       }
     }
+    const c0 = performance.now();
     if (!this.paused) this.step(dt);
     this.draw();
+    if (!this.paused && this.raceT > 0 && raw < 1) {
+      const own = performance.now() - c0;
+      this.hitch.frames++;
+      if (raw > 0.05) {
+        this.hitch.n++;
+        if (own > 25) this.hitch.own++;
+        this.hitch.worst = Math.max(this.hitch.worst, Math.round(raw * 1000));
+      }
+    }
     this.raf = requestAnimationFrame(this.frame);
   };
 

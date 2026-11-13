@@ -331,6 +331,8 @@ function openOpts() {
   $('opts').classList.remove('hidden');
   // w grze sieciowej nie da się zatrzymać czasu innym graczom
   $('onote').classList.toggle('hidden', !net);
+  const h = game.hitch;
+  $('odiag').textContent = `Przycięcia: ${h.n} na ${h.frames} klatek, z winy gry: ${h.own}, najdłuższe: ${h.worst} ms`;
   if (!net) game.paused = true;
 }
 $('optbtn').onclick = () => ($('opts').classList.contains('hidden') ? openOpts() : closeOpts());
